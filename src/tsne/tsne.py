@@ -14,15 +14,47 @@ def pairwise_distance(X):
     """
     return neg_sq_euclidean_dist(X[None, :, :], X[:, None, :])
 
+def normalized_exponential(M, add_stability=True):
+    '''
+    The form of the equation for p_ij and q_ij is
+    exp(.)/sum(exp(.))
+
+    This function calcultes the normalized exponential
+    of each row of a Matrix M. Since we do not sum over k = l,
+    we set the diagonals to zero
+
+    If we set add_stability = 0, we may subtract the max of each row
+    from every entry in the row, which may be necessary for numerical
+    calculations.
+
+    I AM USING THE STABILITY CALCULATION FROM THE BLOG POST
+    '''
+    if add_stability:
+        # Find the maximum of each row
+        maxes = np.max(M, axis=1).reshape([-1, 1])
+        # Subtract the max from each element and exponentiate
+        expx = np.exp(M - maxes)
+    else:
+        expx = np.exp(M)
+
+    # Since we do not sum over k = l, we set the diagonals to zero
+    np.fill_diagonal(expx, 0.)
+    # Avoid division by 0 errors
+    expx = expx + 1e-8
+
+    # Calculate Normalized Exponential
+    rowsums = expx.sum(axis=1).reshape([-1, 1])
+    normalized_exp = expx / rowsums
+
+    return normalized_exp
+
 def prob_matrix(dist_X, sigmas):
     """
     Returns the matrix of conditional probabilities p_j|i.
     :param dist_X: the pairwise distance matrix
     :param sigmas: a vector of sigma values corresponding to each row of the distance matrix
     """
-    p = np.exp(dist_X / (2*sigmas.reshape(-1, 1)))
-    np.fill_diagonal(p, 0)
-    return p / p.sum(axis=1).reshape(-1, 1)
+    return normalized_exponential(dist_X / (2*(sigmas**2).reshape(-1, 1)))
 
 def perplexity(prob_X):
     """
@@ -79,10 +111,21 @@ def get_pmatrix(X, perplexity):
     :return: the joint probability matrix p_ij
     """
     # get the pairwise distances
-    dist = pairwise_distance(M)
+    dist = pairwise_distance(X)
     # get the sigmas
     sigmas = get_sigmas(dist, perplexity)
     # get the matrix of conditional probabilities
     prob = prob_matrix(dist, sigmas)
     p = (prob + prob.T) / (2*prob.shape[0])
     return p
+
+def get_qmatrix(Y):
+    """
+    Calculates the low dimensional affinities joint matrix q_ij.
+    :param Y: low dimensional matrix representation of high dimensional matrix X
+    :return: the joint probability matrix q_ij
+    """
+    q = 1 / (1 - pairwise_distance(Y))
+    np.fill_diagonal(q, 0)
+    return q / q.sum()
+
