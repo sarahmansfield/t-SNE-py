@@ -1,5 +1,5 @@
 import numpy as np
-
+SEED = 1
 
 def neg_sq_euclidean_dist(a, b):
     """
@@ -129,3 +129,52 @@ def get_qmatrix(Y):
     np.fill_diagonal(q, 0)
     return q / q.sum()
 
+def gradient(P, Q, Y):
+    """
+    Calculates the gradient of the Kullback-Leibler divergence between P and Q
+    :param P: the joint probability matrix
+    :param Q: the Student-t based joint probability distribution matrix
+    :param Y: low dimensional matrix representation of high dimensional matrix X
+    :return: a 2d array of the gradient values with the same dimensions as Y
+    """
+    pq_diff = np.expand_dims(P - Q, axis=2)
+    y_diff = np.expand_dims(Y, axis=1) - np.expand_dims(Y, axis=0)
+    dist = 1 - pairwise_distance(Y)
+    inv_distance = np.expand_dims(1 / dist, axis=2)
+
+    # multiply and sum over each row
+    grad = 4 * (pq_diff * y_diff * inv_distance).sum(axis=1)
+    return grad
+
+
+def TSNE(X, perplexity, num_iter=1000, learning_rate=100, momentum=0.5):
+    """
+    Performs t-SNE on a given matrix X.
+    :param X: matrix of high dimensional data
+    :param perplexity: cost function parameter
+    :param num_iter: number of iterations
+    :param learning_rate: learning rate
+    :param momentum: momentum
+    :return: matrix of 2D data representing X
+    """
+    # calculate joint probability matrix
+    joint_p = get_pmatrix(X, perplexity)
+    # initialize Y by sampling from Gaussian
+    Y_t = np.random.RandomState(SEED).normal(0, 10e-4, [X.shape[0], 2])
+    # initialize past iteration Y_{t-1}
+    Y_t1 = Y_t.copy()
+    # initialize past iteration Y_{t-2}
+    Y_t2 = Y_t.copy()
+
+    for t in range(num_iter):
+        # compute low dimensional affinities matrix
+        joint_q = get_qmatrix(Y_t)
+        # compute gradient
+        grad = gradient(joint_p, joint_q, Y_t)
+        # update current Y
+        Y_t = Y_t1 - learning_rate * grad + momentum * (Y_t1 - Y_t2)
+        # update past iterations
+        Y_t1 = Y_t.copy()
+        Y_t2 = Y_t1.copy()
+
+    return Y_t
