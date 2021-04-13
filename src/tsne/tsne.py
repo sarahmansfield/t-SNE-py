@@ -1,18 +1,11 @@
 import numpy as np
-SEED = 1
-
-def neg_sq_euclidean_dist(a, b):
-    """
-    Returns the negative squared Euclidean distance between two vectors a and b.
-    """
-    euclidean_dist = np.sqrt(((a - b) ** 2).sum(axis=-1))
-    return -euclidean_dist ** 2
 
 def pairwise_distance(X):
     """
-    Returns the pairwise distance matrix for a matrix X as a collection of row vectors.
+    Returns the pairwise distance matrix for a matrix X using negative squared Euclidean distance.
     """
-    return neg_sq_euclidean_dist(X[None, :, :], X[:, None, :])
+    sum_X = (X ** 2).sum(axis=1)
+    return -np.add(np.add(-2 * np.dot(X, X.T), sum_X).T, sum_X)
 
 def normalized_exponential(M, add_stability=True):
     '''
@@ -160,7 +153,7 @@ def TSNE(X, perplexity, num_iter=1000, learning_rate=100, momentum=0.5):
     # calculate joint probability matrix
     joint_p = get_pmatrix(X, perplexity)
     # initialize Y by sampling from Gaussian
-    Y_t = np.random.RandomState(SEED).normal(0, 10e-4, [X.shape[0], 2])
+    Y_t = np.random.RandomState(1).normal(0, 10e-4, [X.shape[0], 2])
     # initialize past iteration Y_{t-1}
     Y_t1 = Y_t.copy()
     # initialize past iteration Y_{t-2}
