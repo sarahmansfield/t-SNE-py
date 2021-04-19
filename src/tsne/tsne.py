@@ -1,4 +1,5 @@
 import numpy as np
+from numba import jit
 
 def pairwise_distance(X):
     """
@@ -7,28 +8,15 @@ def pairwise_distance(X):
     sum_X = (X ** 2).sum(axis=1)
     return -np.add(np.add(-2 * np.dot(X, X.T), sum_X).T, sum_X)
 
-def normalized_exponential(M, add_stability=True):
-    '''
-    The form of the equation for p_ij and q_ij is
-    exp(.)/sum(exp(.))
-
-    This function calcultes the normalized exponential
-    of each row of a Matrix M. Since we do not sum over k = l,
-    we set the diagonals to zero
-
-    If we set add_stability = 0, we may subtract the max of each row
-    from every entry in the row, which may be necessary for numerical
-    calculations.
-
-    I AM USING THE STABILITY CALCULATION FROM THE BLOG POST
-    '''
-    if add_stability:
-        # Find the maximum of each row
-        maxes = np.max(M, axis=1).reshape([-1, 1])
-        # Subtract the max from each element and exponentiate
-        expx = np.exp(M - maxes)
-    else:
-        expx = np.exp(M)
+def prob_matrix(dist_X, sigmas):
+    """
+    Returns the matrix of conditional probabilities p_j|i.
+    :param dist_X: the pairwise distance matrix
+    :param sigmas: a vector of sigma values corresponding to each row of the distance matrix
+    """
+    two_sig_sq = np.asarray(2*np.square(sigmas)).reshape((-1, 1))
+    x = dist_X / two_sig_sq
+    expx = np.exp(x)
 
     # Since we do not sum over k = l, we set the diagonals to zero
     np.fill_diagonal(expx, 0.)
@@ -36,18 +24,9 @@ def normalized_exponential(M, add_stability=True):
     expx = expx + 1e-8
 
     # Calculate Normalized Exponential
-    rowsums = expx.sum(axis=1).reshape([-1, 1])
+    rowsums = expx.sum(axis=1).reshape((-1, 1))
     normalized_exp = expx / rowsums
-
     return normalized_exp
-
-def prob_matrix(dist_X, sigmas):
-    """
-    Returns the matrix of conditional probabilities p_j|i.
-    :param dist_X: the pairwise distance matrix
-    :param sigmas: a vector of sigma values corresponding to each row of the distance matrix
-    """
-    return normalized_exponential(dist_X / (2*(sigmas**2).reshape(-1, 1)))
 
 def perplexity(prob_X):
     """
@@ -57,6 +36,11 @@ def perplexity(prob_X):
     """
     entropy = -np.sum(prob_X * np.log2(prob_X), axis=1)
     return 2**entropy
+
+# add jit decorators
+pairwise_distance_nb = jit(pairwise_distance_vec, nopython=True, cache=True)
+prob_matrix_nb = jit(prob_matrix)
+perplexity_nb = jit(perplexity, nopython=True, cache=True)
 
 def binary_search(f, target_perplexity, lower=1e-10, upper=1000, tol=1e-8, max_iter=10000):
     """
@@ -91,7 +75,7 @@ def get_sigmas(dist_X, target_perplexity):
     sigmas = np.zeros(nrows)
 
     for i in range(nrows):
-        f = lambda sigma: perplexity(prob_matrix(dist_X[i:i + 1, :], np.array(sigma)))
+        f = lambda sigma: perplexity_nb(prob_matrix_nb(dist_X[i:i + 1, :], np.asarray(sigma)))
         best_sigma = binary_search(f, target_perplexity)
         sigmas[i] = best_sigma
     return sigmas
@@ -104,11 +88,11 @@ def get_pmatrix(X, perplexity):
     :return: the joint probability matrix p_ij
     """
     # get the pairwise distances
-    dist = pairwise_distance(X)
+    dist = pairwise_distance_nb(X)
     # get the sigmas
     sigmas = get_sigmas(dist, perplexity)
     # get the matrix of conditional probabilities
-    prob = prob_matrix(dist, sigmas)
+    prob = prob_matrix_nb(dist, sigmas)
     p = (prob + prob.T) / (2*prob.shape[0])
     return p
 
@@ -118,7 +102,7 @@ def get_qmatrix(Y):
     :param Y: low dimensional matrix representation of high dimensional matrix X
     :return: the joint probability matrix q_ij
     """
-    q = 1 / (1 - pairwise_distance(Y))
+    q = 1 / (1 - pairwise_distance_nb(Y))
     np.fill_diagonal(q, 0)
     return q / q.sum()
 
@@ -132,7 +116,7 @@ def gradient(P, Q, Y):
     """
     pq_diff = np.expand_dims(P - Q, axis=2)
     y_diff = np.expand_dims(Y, axis=1) - np.expand_dims(Y, axis=0)
-    dist = 1 - pairwise_distance(Y)
+    dist = 1 - pairwise_distance_nb(Y)
     inv_distance = np.expand_dims(1 / dist, axis=2)
 
     # multiply and sum over each row
@@ -140,7 +124,7 @@ def gradient(P, Q, Y):
     return grad
 
 
-def TSNE(X, perplexity, num_iter=1000, learning_rate=100, momentum=0.5):
+def TSNE(X, perplexity=40, num_iter=1000, learning_rate=100, momentum_initial=0.5, momentum_final=0.8):
     """
     Performs t-SNE on a given matrix X.
     :param X: matrix of high dimensional data
@@ -148,10 +132,13 @@ def TSNE(X, perplexity, num_iter=1000, learning_rate=100, momentum=0.5):
     :param num_iter: number of iterations
     :param learning_rate: learning rate
     :param momentum: momentum
-    :return: matrix of 2D data representing X
+    :return: matrix of 2-dimensional data representing X
     """
     # calculate joint probability matrix
     joint_p = get_pmatrix(X, perplexity)
+    # early exaggeration to improve optimization
+    joint_p = 4 * joint_p
+
     # initialize Y by sampling from Gaussian
     Y_t = np.random.RandomState(1).normal(0, 10e-4, [X.shape[0], 2])
     # initialize past iteration Y_{t-1}
@@ -159,15 +146,26 @@ def TSNE(X, perplexity, num_iter=1000, learning_rate=100, momentum=0.5):
     # initialize past iteration Y_{t-2}
     Y_t2 = Y_t.copy()
 
-    for t in range(num_iter):
+    for i in range(num_iter):
         # compute low dimensional affinities matrix
         joint_q = get_qmatrix(Y_t)
         # compute gradient
         grad = gradient(joint_p, joint_q, Y_t)
+
+        # update momentum
+        if i < 250:
+            momentum = momentum_initial
+        else:
+            momentum = momentum_final
+
         # update current Y
         Y_t = Y_t1 - learning_rate * grad + momentum * (Y_t1 - Y_t2)
         # update past iterations
         Y_t1 = Y_t.copy()
         Y_t2 = Y_t1.copy()
+
+        # conclude early exaggeration and revert joint probability matrix back
+        if i == 50:
+            joint_p = joint_p / 4
 
     return Y_t
