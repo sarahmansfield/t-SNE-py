@@ -38,7 +38,7 @@ def perplexity(prob_X):
     return 2**entropy
 
 # add jit decorators
-pairwise_distance_nb = jit(pairwise_distance_vec, nopython=True, cache=True)
+pairwise_distance_nb = jit(pairwise_distance, nopython=True, cache=True)
 prob_matrix_nb = jit(prob_matrix)
 perplexity_nb = jit(perplexity, nopython=True, cache=True)
 
@@ -131,7 +131,8 @@ def TSNE(X, perplexity=40, num_iter=1000, learning_rate=100, momentum_initial=0.
     :param perplexity: cost function parameter
     :param num_iter: number of iterations
     :param learning_rate: learning rate
-    :param momentum: momentum
+    :param momentum_initial: initial momentum for first 250 iterations
+    :param momentum_final: final momentum for remaining iterations
     :return: matrix of 2-dimensional data representing X
     """
     # calculate joint probability matrix
