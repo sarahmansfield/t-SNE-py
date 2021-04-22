@@ -1,5 +1,8 @@
 import numpy as np
 from numba import jit
+import matplotlib.pyplot as plt
+import seaborn as sns
+import pandas as pd
 
 def pairwise_distance(X):
     """
@@ -170,3 +173,18 @@ def TSNE(X, perplexity=40, num_iter=1000, learning_rate=100, momentum_initial=0.
             joint_p = joint_p / 4
 
     return Y_t
+
+def plot_tsne(Y, labels):
+    """
+    Plots a visualization of data processed through t-SNE
+    :param Y: a two-dimensional matrix that has been reduced through t-SNE
+    :param labels: an array of labels corresponding to each row of Y's classification
+    :return: a plot of the data colored by class
+    """
+    df = pd.DataFrame(data=np.c_[Y, labels], columns=("Coord1", "Coord2", "label"))
+    # split legend into two columns if there are lots of classification categories
+    if len(set(labels)) > 10:
+        sns.FacetGrid(df, hue="label", height=6).map(plt.scatter, "Coord1", "Coord2").add_legend(ncol=2)
+    else:
+        sns.FacetGrid(df, hue="label", height=6).map(plt.scatter, "Coord1", "Coord2").add_legend()
+    plt.show()
