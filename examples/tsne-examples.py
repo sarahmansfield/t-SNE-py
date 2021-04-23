@@ -34,7 +34,7 @@ olivetti_Y = TSNE(olivetti_reduced)
 plot_tsne(olivetti_Y, olivetti.target)
 
 # COIL20 dataset
-mat = scipy.io.loadmat("COIL20.mat")
+mat = scipy.io.loadmat("data/COIL20.mat")
 coil20 = mat['X']
 coil20_labels = mat['Y'][:, 0]
 coil20_reduced = reduce_pca(coil20)
