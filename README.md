@@ -1,5 +1,5 @@
 # t-Distributed Stochastic Neighbor Embedding
-A simple Python implementation of t-Distributed Stochastic Neighbor Embedding as described in [Visualizing Data using t-SNE](https://www.jmlr.org/papers/volume9/vandermaaten08a/vandermaaten08a.pdf) by Lauren van der Maaten and Geoffrey Hinton (2008).
+A simple Python implementation of t-Distributed Stochastic Neighbor Embedding as described in [Visualizing Data using t-SNE](https://www.jmlr.org/papers/volume9/vandermaaten08a/vandermaaten08a.pdf) by Laurens van der Maaten and Geoffrey Hinton (2008).
 
 This package was created as a final project for Duke University STA 663 (Statistical Computation), Spring 2021.
 
